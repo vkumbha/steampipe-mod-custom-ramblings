@@ -9,8 +9,13 @@ dashboard "dashboard_tutorial" {
 
     card {
       width = "2"
+      sql   = query.zendesk_ticket_total_age.sql
+    }
+
+    card {
+      width = "2"
       sql   = <<-EOQ
-    select count(*) as "Total" from zendesk_ticket where status not in ('closed','solved');
+    select count(*) as "Total Tickets" from zendesk_ticket where status not in ('closed','solved');
     EOQ
     }
 
@@ -45,6 +50,17 @@ dashboard "dashboard_tutorial" {
   }
 }
 
+query "zendesk_ticket_total_age" {
+  sql = <<-EOQ
+  select
+      sum(date_part('day', now() - t.created_at)) as "Total Age (days)"
+    from
+      zendesk_ticket as t
+    where
+      t.status in ('open', 'pending', 'hold')
+  EOQ
+}
+
 query "zendesk_ticket_aging_report" {
   sql = <<-EOQ
   (
@@ -56,7 +72,7 @@ query "zendesk_ticket_aging_report" {
         when t.assignee_id is null then 'Unassigned'
       end as agent,
       o.name as organization,
-      substring(t.subject for 40) as ticket
+      substring(t.subject for 100) as ticket
     from
       zendesk_ticket as t,
       zendesk_organization as o
@@ -73,7 +89,7 @@ query "zendesk_ticket_aging_report" {
       t.status,
       u.name as agent,
       o.name as organization,
-      substring(t.subject for 40) as ticket
+      substring(t.subject for 100) as ticket
     from
       zendesk_ticket as t,
       zendesk_user as u,
