@@ -1,3 +1,9 @@
+## v0.3 [2023-09-09]
+
+_Enhancements_
+
+- Cosmetic changes to the reports
+
 ## v0.2 [2023-09-04]
 
 _What's new?_
