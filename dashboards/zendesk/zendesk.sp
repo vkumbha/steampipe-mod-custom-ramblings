@@ -27,7 +27,7 @@ dashboard "zendesk_dashboard" {
     card {
       width = "2"
       sql   = <<-EOQ
-    select count(*) as "Unsolved Tickets" from zendesk_ticket where status not in ('closed','solved');
+    select count(*) as "Unsolved Tickets" from zendesk_ticket where status not in ('closed','solved', 'hold');
     EOQ
     }
 
@@ -43,7 +43,7 @@ dashboard "zendesk_dashboard" {
       width = "2"
       type  = "info"
       sql   = <<-EOQ
-    select count(*) as "Hold" from zendesk_ticket where status = 'hold';
+    select count(*) as "Pending" from zendesk_ticket where status = 'pending';
     EOQ
     }
 
@@ -51,7 +51,7 @@ dashboard "zendesk_dashboard" {
       width = "2"
       type  = "info"
       sql   = <<-EOQ
-    select count(*) as "Pending" from zendesk_ticket where status = 'pending';
+    select count(*) as "Hold" from zendesk_ticket where status = 'hold';
     EOQ
     }
 

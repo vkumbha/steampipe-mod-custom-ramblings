@@ -1,3 +1,10 @@
+## v0.5 [2024-01-22]
+
+_Enhancements_
+
+- Updated the Unsolved tickets cards to exclude tickets with status hold.
+- Rearrange the cards positioning.
+
 ## v0.4 [2024-01-22]
 
 _Enhancements_
