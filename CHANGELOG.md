@@ -1,3 +1,10 @@
+## v0.4 [2024-01-22]
+
+_Enhancements_
+
+- Updated the Ticket Age cards to include only tickets of status new, open and pending.
+- Updated the cards to include the tickets of status 'new'.
+
 ## v0.3 [2023-09-09]
 
 _Enhancements_

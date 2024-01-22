@@ -35,7 +35,7 @@ dashboard "zendesk_dashboard" {
       width = "2"
       type  = "info"
       sql   = <<-EOQ
-    select count(*) as "Open" from zendesk_ticket where status = 'open';
+    select count(*) as "Open" from zendesk_ticket where status in ('open', 'new');
     EOQ
     }
 
@@ -104,7 +104,7 @@ query "zendesk_ticket_total_age" {
     from
       zendesk_ticket as t
     where
-      t.status in ('open', 'pending', 'hold')
+      t.status in ('new', 'open', 'pending')
   EOQ
 }
 
@@ -115,7 +115,7 @@ query "zendesk_oldest_unsolved_ticket" {
     FROM
       zendesk_ticket as t
     WHERE
-      t.status IN ('open', 'pending', 'hold')
+      t.status IN ('new', 'open', 'pending')
     ORDER BY
       t.created_at ASC
     LIMIT 1
@@ -139,7 +139,7 @@ query "zendesk_ticket_aging_report" {
       zendesk_organization as o
     where
       t.organization_id = o.id
-      and t.status in ('open', 'pending', 'hold')
+      and t.status in ('new', 'open', 'pending', 'hold')
       and t.assignee_id is null
   )
   UNION ALL
@@ -158,7 +158,7 @@ query "zendesk_ticket_aging_report" {
     where
       t.assignee_id = u.id
       and t.organization_id = o.id
-      and t.status in ('open', 'pending', 'hold')
+      and t.status in ('new', 'open', 'pending', 'hold')
   )
   order by
     ticket asc
@@ -175,7 +175,7 @@ query "tickets_by_organization" {
       zendesk_organization as o
     where
       t.organization_id = o.id
-      and t.status in ('open', 'pending', 'hold')
+      and t.status in ('new', 'open', 'pending', 'hold')
     group by
       o.name
     order by
@@ -247,7 +247,7 @@ query "open_ticket_by_product" {
     FROM
       zendesk_ticket
     WHERE
-      status in ('open', 'hold', 'pending')
+      status in ('new', 'open', 'hold', 'pending')
   ),
   products as (
     SELECT
