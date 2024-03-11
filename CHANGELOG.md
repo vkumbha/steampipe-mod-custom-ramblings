@@ -1,3 +1,8 @@
+## v0.6 [2024-03-11]
+
+- Added a report for New and Open tickets.
+- Updated all unsolved tickets report.
+
 ## v0.5 [2024-01-22]
 
 _Enhancements_

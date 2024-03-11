@@ -55,13 +55,13 @@ dashboard "zendesk_dashboard" {
     EOQ
     }
 
-    #chart {
+    # chart {
     #  width    = 6
     #  type     = "donut"
     #  grouping = "compare"
     #  title    = "Tickets by Product"
     #  sql      = query.open_ticket_by_product.sql
-    #}
+    # }
 
     chart {
       width    = 4
@@ -91,7 +91,18 @@ dashboard "zendesk_dashboard" {
           https://turbot.zendesk.com/agent/tickets/{{.'ticket' | @uri}}
         EOT
       }
-      sql = query.zendesk_ticket_aging_report.sql
+      title = "New and Open Tickets"
+      sql   = query.new_and_open_tickets_report.sql
+    }
+
+    table {
+      column "ticket" {
+        href = <<-EOT
+          https://turbot.zendesk.com/agent/tickets/{{.'ticket' | @uri}}
+        EOT
+      }
+      title = "All Unsolved Tickets"
+      sql   = query.all_unsolved_tickets_report.sql
     }
 
   }
@@ -122,7 +133,7 @@ query "zendesk_oldest_unsolved_ticket" {
   EOQ
 }
 
-query "zendesk_ticket_aging_report" {
+query "new_and_open_tickets_report" {
   sql = <<-EOQ
   (
     select
@@ -139,7 +150,7 @@ query "zendesk_ticket_aging_report" {
       zendesk_organization as o
     where
       t.organization_id = o.id
-      and t.status in ('new', 'open', 'pending', 'hold')
+      and t.status in ('new', 'open')
       and t.assignee_id is null
   )
   UNION ALL
@@ -158,10 +169,79 @@ query "zendesk_ticket_aging_report" {
     where
       t.assignee_id = u.id
       and t.organization_id = o.id
-      and t.status in ('new', 'open', 'pending', 'hold')
+      and t.status in ('new', 'open')
   )
   order by
     ticket asc
+  EOQ
+}
+
+
+query "all_unsolved_tickets_report" {
+  sql = <<-EOQ
+    WITH custom_field_values AS (
+        SELECT
+            id,
+            (jsonb_array_elements(custom_fields) ->> 'id') AS field_id,
+            (jsonb_array_elements(custom_fields) ->> 'value') AS field_value
+        FROM
+            zendesk_ticket
+        WHERE
+            status IN ('new', 'open', 'pending', 'hold')
+    ),
+    all_types AS (
+        SELECT
+            id,
+            field_value
+        FROM
+            custom_field_values
+        WHERE
+            field_id = '360008999512'
+    )
+    (
+        SELECT
+            date_part('day', NOW() - t.created_at) AS age,
+            t.id AS ticket,
+            t.status,
+            afv.field_value as ticket_type,
+            CASE
+                WHEN t.assignee_id IS NULL THEN 'Unassigned'
+            END AS assignee,
+            o.name AS organization,
+            SUBSTRING(t.subject FOR 100) AS subject
+        FROM
+            zendesk_ticket AS t
+        JOIN
+            zendesk_organization AS o ON t.organization_id = o.id
+        LEFT JOIN
+            all_types AS afv ON t.id = afv.id
+        WHERE
+            t.status IN ('new', 'open', 'pending', 'hold')
+            AND t.assignee_id IS NULL
+    )
+    UNION ALL
+    (
+        SELECT
+            date_part('day', NOW() - t.created_at) AS age,
+            t.id AS ticket,
+            t.status,
+            afv.field_value as ticket_type,
+            u.name AS assignee,
+            o.name AS organization,
+            SUBSTRING(t.subject FOR 100) AS subject
+        FROM
+            zendesk_ticket AS t
+        JOIN
+            zendesk_user AS u ON t.assignee_id = u.id
+        JOIN
+            zendesk_organization AS o ON t.organization_id = o.id
+        LEFT JOIN
+            all_types AS afv ON t.id = afv.id
+        WHERE
+            t.status IN ('new', 'open', 'pending', 'hold')
+    )
+    ORDER BY
+        ticket ASC;
   EOQ
 }
 
