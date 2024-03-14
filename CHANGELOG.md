@@ -1,3 +1,11 @@
+## v0.7 [2024-03-14]
+
+- Added a new card "Age - new, open (days)".
+- Added "Unsolved Tickets by Status" donut chart.
+- Added "Ticket Aging Metrics - new, open, pending, hold" column chart.
+- Renamed the card "Total Tickets Age (days)" to "Age - new, open, pending (days)".
+- Removed the card "Oldest Ticket Age (days)".
+
 ## v0.6 [2024-03-11]
 
 - Added a report for New and Open tickets.

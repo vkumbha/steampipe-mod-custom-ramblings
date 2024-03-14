@@ -8,21 +8,22 @@ dashboard "zendesk_dashboard" {
     category = "Summary"
   }
 
-  text {
-    value = "Steampipe Dashboard comprising a range of reports for Zendesk plugin."
-  }
-
   container {
+
+    card {
+      width = "2"
+      sql   = query.zendesk_open_ticket_age.sql
+    }
 
     card {
       width = "2"
       sql   = query.zendesk_ticket_total_age.sql
     }
 
-    card {
-      width = "2"
-      sql   = query.zendesk_oldest_unsolved_ticket.sql
-    }
+    # card {
+    #   width = "2"
+    #   sql   = query.zendesk_oldest_unsolved_ticket.sql
+    # }
 
     card {
       width = "2"
@@ -65,10 +66,10 @@ dashboard "zendesk_dashboard" {
 
     chart {
       width    = 4
-      type     = "column"
+      type     = "donut"
       grouping = "compare"
-      title    = "Unsolved Tickets by Organization"
-      sql      = query.tickets_by_organization.sql
+      title    = "Unsolved Tickets by Status"
+      sql      = query.tickets_by_status.sql
     }
 
     chart {
@@ -85,10 +86,51 @@ dashboard "zendesk_dashboard" {
       sql   = query.ticket_types_solved_in_last_30_days.sql
     }
 
+    chart {
+      width    = 6
+      type     = "column"
+      grouping = "compare"
+      title    = "Unsolved Tickets by Organization - new, open, pending, hold"
+      sql      = query.tickets_by_organization.sql
+    }
+
+    chart "issue_age_stats" {
+      type  = "column"
+      title = "Ticket Aging Metrics  - new, open, pending, hold"
+      width = 6
+
+      sql = <<-EOQ
+      WITH age_counts AS (
+        SELECT
+          CASE
+          WHEN now()::date - created_at::date > 180 THEN '>6 Months'
+          WHEN now()::date - created_at::date > 90 THEN '>3 Months'
+          WHEN now()::date - created_at::date >= 30 THEN '>1 Month'
+          END AS age_group,
+          1 AS issue_count
+        FROM
+          zendesk_ticket
+        WHERE
+          status IN ('new', 'open', 'pending', 'hold')
+      )
+      SELECT
+        age_group,
+        COUNT(issue_count) AS number_of_tickets
+      FROM
+        age_counts
+      WHERE
+        age_group IS NOT NULL
+      GROUP BY
+        age_group
+      ORDER BY
+        age_group;
+    EOQ
+    }
+
     table {
-      column "ticket" {
+      column "Ticket" {
         href = <<-EOT
-          https://turbot.zendesk.com/agent/tickets/{{.'ticket' | @uri}}
+          https://turbot.zendesk.com/agent/tickets/{{.'Ticket' | @uri}}
         EOT
       }
       title = "New and Open Tickets"
@@ -96,22 +138,33 @@ dashboard "zendesk_dashboard" {
     }
 
     table {
-      column "ticket" {
+      column "Ticket" {
         href = <<-EOT
-          https://turbot.zendesk.com/agent/tickets/{{.'ticket' | @uri}}
+          https://turbot.zendesk.com/agent/tickets/{{.'Ticket' | @uri}}
         EOT
       }
       title = "All Unsolved Tickets"
       sql   = query.all_unsolved_tickets_report.sql
     }
-
   }
+}
+
+
+query "zendesk_open_ticket_age" {
+  sql = <<-EOQ
+  select
+      sum(date_part('day', now() - t.created_at)) as "Age - new, open (days)"
+    from
+      zendesk_ticket as t
+    where
+      t.status in ('new', 'open')
+  EOQ
 }
 
 query "zendesk_ticket_total_age" {
   sql = <<-EOQ
   select
-      sum(date_part('day', now() - t.created_at)) as "Total Tickets Age (days)"
+      sum(date_part('day', now() - t.created_at)) as "Age - new, open, pending (days)"
     from
       zendesk_ticket as t
     where
@@ -137,14 +190,14 @@ query "new_and_open_tickets_report" {
   sql = <<-EOQ
   (
     select
-      date_part('day', now() - t.created_at) as age,
-      t.id as ticket,
-      t.status,
+      date_part('day', now() - t.created_at) as "Age (days)",
+      t.id as "Ticket",
+      t.status as "Status",
+      substring(t.subject for 100) as "Subject",
+      o.name as "Organization",
       case
         when t.assignee_id is null then 'Unassigned'
-      end as assignee,
-      o.name as organization,
-      substring(t.subject for 100) as subject
+      end as "Assignee"
     from
       zendesk_ticket as t,
       zendesk_organization as o
@@ -156,12 +209,12 @@ query "new_and_open_tickets_report" {
   UNION ALL
   (
     select
-      date_part('day', now() - t.created_at) as age,
-      t.id as ticket,
-      t.status,
-      u.name as assignee,
-      o.name as organization,
-      substring(t.subject for 100) as subject
+      date_part('day', now() - t.created_at) as "Age (days)",
+      t.id as "Ticket",
+      t.status as "Status",
+      substring(t.subject for 100) as "Subject",
+      o.name as "Organization",
+      u.name as "Assignee"
     from
       zendesk_ticket as t,
       zendesk_user as u,
@@ -172,76 +225,50 @@ query "new_and_open_tickets_report" {
       and t.status in ('new', 'open')
   )
   order by
-    ticket asc
+    "Ticket" asc
   EOQ
 }
 
-
 query "all_unsolved_tickets_report" {
   sql = <<-EOQ
-    WITH custom_field_values AS (
-        SELECT
-            id,
-            (jsonb_array_elements(custom_fields) ->> 'id') AS field_id,
-            (jsonb_array_elements(custom_fields) ->> 'value') AS field_value
-        FROM
-            zendesk_ticket
-        WHERE
-            status IN ('new', 'open', 'pending', 'hold')
-    ),
-    all_types AS (
-        SELECT
-            id,
-            field_value
-        FROM
-            custom_field_values
-        WHERE
-            field_id = '360008999512'
-    )
     (
-        SELECT
-            date_part('day', NOW() - t.created_at) AS age,
-            t.id AS ticket,
-            t.status,
-            afv.field_value as ticket_type,
-            CASE
-                WHEN t.assignee_id IS NULL THEN 'Unassigned'
-            END AS assignee,
-            o.name AS organization,
-            SUBSTRING(t.subject FOR 100) AS subject
-        FROM
-            zendesk_ticket AS t
-        JOIN
-            zendesk_organization AS o ON t.organization_id = o.id
-        LEFT JOIN
-            all_types AS afv ON t.id = afv.id
-        WHERE
-            t.status IN ('new', 'open', 'pending', 'hold')
-            AND t.assignee_id IS NULL
+      select
+        date_part('day', now() - t.created_at) as "Age (days)",
+        t.id as "Ticket",
+        t.status as "Status",
+        substring(t.subject for 100) as "Subject",
+        o.name as "Organization",
+        case
+          when t.assignee_id is null then 'Unassigned'
+        end as "Assignee"
+      from
+        zendesk_ticket as t,
+        zendesk_organization as o
+      where
+        t.organization_id = o.id
+        and t.status in ('new', 'open', 'pending', 'hold')
+        and t.assignee_id is null
     )
     UNION ALL
     (
-        SELECT
-            date_part('day', NOW() - t.created_at) AS age,
-            t.id AS ticket,
-            t.status,
-            afv.field_value as ticket_type,
-            u.name AS assignee,
-            o.name AS organization,
-            SUBSTRING(t.subject FOR 100) AS subject
-        FROM
-            zendesk_ticket AS t
-        JOIN
-            zendesk_user AS u ON t.assignee_id = u.id
-        JOIN
-            zendesk_organization AS o ON t.organization_id = o.id
-        LEFT JOIN
-            all_types AS afv ON t.id = afv.id
-        WHERE
-            t.status IN ('new', 'open', 'pending', 'hold')
+      select
+        date_part('day', now() - t.created_at) as "Age (days)",
+        t.id as "Ticket",
+        t.status as "Status",
+        substring(t.subject for 100) as "Subject",
+        o.name as "Organization",
+        u.name as "Assignee"
+      from
+        zendesk_ticket as t,
+        zendesk_user as u,
+        zendesk_organization as o
+      where
+        t.assignee_id = u.id
+        and t.organization_id = o.id
+        and t.status in ('new', 'open', 'pending', 'hold')
     )
-    ORDER BY
-        ticket ASC;
+    order by
+      "Ticket" asc
   EOQ
 }
 
@@ -259,7 +286,7 @@ query "tickets_by_organization" {
     group by
       o.name
     order by
-      tickets desc
+      tickets asc
   EOQ
 }
 
@@ -350,5 +377,23 @@ query "open_ticket_by_product" {
     product
   order by
     count
+  EOQ
+}
+
+query "tickets_by_status" {
+  sql = <<-EOQ
+    select
+    CASE
+      WHEN t.status = 'pending' AND EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(tags) AS tag WHERE tag = 'customer_action') THEN 'customer_action'
+      WHEN t.status = 'pending' AND NOT EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(tags) AS tag WHERE tag = 'customer_action') THEN 'customer_reply'
+      ELSE t.status 
+    END AS "Status",
+      count(Status)
+    from
+      zendesk_ticket as t
+    where
+      status in ('new','open','pending','hold')
+    group by
+      "Status"
   EOQ
 }

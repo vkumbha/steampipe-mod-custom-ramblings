@@ -5,7 +5,7 @@ mod "custom_ramblings" {
   # color         = "#0089D6"
   # documentation = file("./docs/index.md")
   # icon          = "/images/mods/turbot/kubernetes-insights.svg"
-  # categories    = ["kubernetes", "dashboard", "public cloud"]
+  categories = ["zendesk", "dashboard"]
 
   opengraph {
     title       = "Steampipe Mod for Custom Experiments"
@@ -14,7 +14,7 @@ mod "custom_ramblings" {
   }
 
   require {
-    steampipe = "0.20.10"
+    steampipe = "0.22.0"
     plugin "zendesk" {
       min_version = "0.8.0"
     }
