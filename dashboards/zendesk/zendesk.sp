@@ -20,18 +20,6 @@ dashboard "zendesk_dashboard" {
       sql   = query.zendesk_ticket_total_age.sql
     }
 
-    # card {
-    #   width = "2"
-    #   sql   = query.zendesk_oldest_unsolved_ticket.sql
-    # }
-
-    card {
-      width = "2"
-      sql   = <<-EOQ
-    select count(*) as "Unsolved Tickets" from zendesk_ticket where status not in ('closed','solved', 'hold');
-    EOQ
-    }
-
     card {
       width = "2"
       type  = "info"
@@ -43,26 +31,22 @@ dashboard "zendesk_dashboard" {
     card {
       width = "2"
       type  = "info"
-      sql   = <<-EOQ
-    select count(*) as "Pending" from zendesk_ticket where status = 'pending';
-    EOQ
+      sql   = query.zendesk_pending_tickets_count.sql
+    }
+
+    card {
+      width = "2"
+      type  = "info"
+      sql   = query.zendesk_customer_action_tickets_count.sql
     }
 
     card {
       width = "2"
       type  = "info"
       sql   = <<-EOQ
-    select count(*) as "Hold" from zendesk_ticket where status = 'hold';
+    select count(*) as "Feature Request" from zendesk_ticket where status = 'hold';
     EOQ
     }
-
-    # chart {
-    #  width    = 6
-    #  type     = "donut"
-    #  grouping = "compare"
-    #  title    = "Tickets by Product"
-    #  sql      = query.open_ticket_by_product.sql
-    # }
 
     chart {
       width    = 4
@@ -75,14 +59,14 @@ dashboard "zendesk_dashboard" {
     chart {
       width = 4
       type  = "donut"
-      title = "Tickets created via in last 30 days"
+      title = "Tickets Created Via in Last 30 Days"
       sql   = query.tickets_created_in_last_30_days.sql
     }
 
     chart {
       width = 4
       type  = "donut"
-      title = "Ticket types solved in last 30 days"
+      title = "Ticket Types Solved in Last 30 Days"
       sql   = query.ticket_types_solved_in_last_30_days.sql
     }
 
@@ -149,11 +133,15 @@ dashboard "zendesk_dashboard" {
   }
 }
 
-
 query "zendesk_open_ticket_age" {
   sql = <<-EOQ
   select
-      sum(date_part('day', now() - t.created_at)) as "Age - new, open (days)"
+      'Age - new, open (days)' as label,
+      COALESCE(SUM(date_part('day', now() - t.created_at)), 0) as value,
+      case
+        when COALESCE(SUM(date_part('day', now() - t.created_at)), 0) = 0 then 'ok'
+        else 'alert'
+      end as type
     from
       zendesk_ticket as t
     where
@@ -164,7 +152,7 @@ query "zendesk_open_ticket_age" {
 query "zendesk_ticket_total_age" {
   sql = <<-EOQ
   select
-      sum(date_part('day', now() - t.created_at)) as "Age - new, open, pending (days)"
+      COALESCE(SUM(date_part('day', now() - t.created_at)), 0) as "Age - new, open, pending (days)"
     from
       zendesk_ticket as t
     where
@@ -172,17 +160,27 @@ query "zendesk_ticket_total_age" {
   EOQ
 }
 
-query "zendesk_oldest_unsolved_ticket" {
+query "zendesk_pending_tickets_count" {
   sql = <<-EOQ
-    SELECT
-      date_part('day', now() - t.created_at) as "Oldest Ticket Age (days)"
-    FROM
-      zendesk_ticket as t
-    WHERE
-      t.status IN ('new', 'open', 'pending')
-    ORDER BY
-      t.created_at ASC
-    LIMIT 1
+SELECT count(*) as "Pending"
+ FROM
+   zendesk_ticket 
+ WHERE
+   status = 'pending'
+   AND NOT EXISTS 
+   (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(tags) AS tag WHERE tag = 'customer_action')
+  EOQ
+}
+
+query "zendesk_customer_action_tickets_count" {
+  sql = <<-EOQ
+SELECT count(*) as "Customer Action"
+ FROM
+   zendesk_ticket 
+ WHERE
+   status = 'pending'
+   AND EXISTS 
+   (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(tags) AS tag WHERE tag = 'customer_action')
   EOQ
 }
 
@@ -235,7 +233,12 @@ query "all_unsolved_tickets_report" {
       select
         date_part('day', now() - t.created_at) as "Age (days)",
         t.id as "Ticket",
-        t.status as "Status",
+        --t.status as "Status",
+        CASE
+          WHEN t.status = 'pending' AND EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(t.tags) AS tag WHERE tag = 'customer_action') THEN 'customer_action'
+          WHEN t.status = 'hold' then 'feature_request'
+          ELSE t.status 
+        END AS "Status",
         substring(t.subject for 100) as "Subject",
         o.name as "Organization",
         case
@@ -254,7 +257,12 @@ query "all_unsolved_tickets_report" {
       select
         date_part('day', now() - t.created_at) as "Age (days)",
         t.id as "Ticket",
-        t.status as "Status",
+        --t.status as "Status",
+        CASE
+          WHEN t.status = 'pending' AND EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(t.tags) AS tag WHERE tag = 'customer_action') THEN 'customer_action'
+          WHEN t.status = 'hold' then 'feature_request'
+          ELSE t.status 
+        END AS "Status",
         substring(t.subject for 100) as "Subject",
         o.name as "Organization",
         u.name as "Assignee"
@@ -343,49 +351,12 @@ query "ticket_types_solved_in_last_30_days" {
   EOQ
 }
 
-query "open_ticket_by_product" {
-  sql = <<-EOQ
-    WITH
-  custom_field_values AS (
-    SELECT
-      id,
-      (jsonb_array_elements(custom_fields) ->> 'id') AS field_id,
-      (jsonb_array_elements(custom_fields) ->> 'value') AS field_value
-    FROM
-      zendesk_ticket
-    WHERE
-      status in ('new', 'open', 'hold', 'pending')
-  ),
-  products as (
-    SELECT
-      id,
-      case
-        when field_value is null or field_value = '' then 'other'
-        when field_value is not null then field_value
-      end as product
-    FROM
-      custom_field_values
-    WHERE
-      field_id = '360008999512'
-  )
-  select
-    product,
-    count(product)
-  from
-    products
-  group by
-    product
-  order by
-    count
-  EOQ
-}
-
 query "tickets_by_status" {
   sql = <<-EOQ
     select
     CASE
       WHEN t.status = 'pending' AND EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(tags) AS tag WHERE tag = 'customer_action') THEN 'customer_action'
-      WHEN t.status = 'pending' AND NOT EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(tags) AS tag WHERE tag = 'customer_action') THEN 'customer_reply'
+      WHEN t.status = 'hold' then 'feature_request'
       ELSE t.status 
     END AS "Status",
       count(Status)
