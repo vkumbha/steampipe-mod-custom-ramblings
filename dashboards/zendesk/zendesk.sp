@@ -23,9 +23,7 @@ dashboard "zendesk_dashboard" {
     card {
       width = "2"
       type  = "info"
-      sql   = <<-EOQ
-    select count(*) as "Open" from zendesk_ticket where status in ('open', 'new');
-    EOQ
+      sql   = query.zendesk_open_tickets_count.sql
     }
 
     card {
@@ -159,6 +157,23 @@ query "zendesk_ticket_total_age" {
       t.status in ('new', 'open', 'pending')
   EOQ
 }
+
+query "zendesk_open_tickets_count" {
+  sql = <<-EOQ
+  select 
+      'Open' as label,
+      count(*) as value,
+      case
+        when count(*) = 0 then 'ok'
+        else 'alert'
+      end as type
+    from
+      zendesk_ticket as t
+    where
+      t.status in ('new', 'open')
+  EOQ
+}
+
 
 query "zendesk_pending_tickets_count" {
   sql = <<-EOQ
