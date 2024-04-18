@@ -177,13 +177,11 @@ query "zendesk_open_tickets_count" {
 
 query "zendesk_pending_tickets_count" {
   sql = <<-EOQ
-SELECT count(*) as "Pending"
- FROM
-   zendesk_ticket 
- WHERE
-   status = 'pending'
-   AND NOT EXISTS 
-   (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(tags) AS tag WHERE tag = 'customer_action')
+SELECT 
+    sum(case when status = 'pending' and not exists (select 1 from JSONB_ARRAY_ELEMENTS_TEXT(tags) as tag where tag = 'customer_action') then 1 else 0 end) +
+    sum(case when status = 'hold' and exists (select 1 from JSONB_ARRAY_ELEMENTS_TEXT(tags) as tag where tag = 'planned') then 1 else 0 end) as "Pending"
+FROM 
+    zendesk_ticket;
   EOQ
 }
 
@@ -251,6 +249,7 @@ query "all_unsolved_tickets_report" {
         --t.status as "Status",
         CASE
           WHEN t.status = 'pending' AND EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(t.tags) AS tag WHERE tag = 'customer_action') THEN 'customer_action'
+          WHEN t.status = 'hold' AND EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(t.tags) AS tag WHERE tag = 'planned') THEN 'planned'
           WHEN t.status = 'hold' then 'feature_request'
           ELSE t.status 
         END AS "Status",
@@ -275,6 +274,7 @@ query "all_unsolved_tickets_report" {
         --t.status as "Status",
         CASE
           WHEN t.status = 'pending' AND EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(t.tags) AS tag WHERE tag = 'customer_action') THEN 'customer_action'
+          WHEN t.status = 'hold' AND EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(t.tags) AS tag WHERE tag = 'planned') THEN 'planned'
           WHEN t.status = 'hold' then 'feature_request'
           ELSE t.status 
         END AS "Status",
@@ -371,6 +371,7 @@ query "tickets_by_status" {
     select
     CASE
       WHEN t.status = 'pending' AND EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(tags) AS tag WHERE tag = 'customer_action') THEN 'customer_action'
+      WHEN t.status = 'hold' AND EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(t.tags) AS tag WHERE tag = 'planned') THEN 'planned'
       WHEN t.status = 'hold' then 'feature_request'
       ELSE t.status 
     END AS "Status",
