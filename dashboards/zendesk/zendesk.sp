@@ -202,7 +202,7 @@ query "new_and_open_tickets_report" {
   (
     select
       date_part('day', now() - t.created_at) as "Age (days)",
-      t.id as "Ticket",
+      t.id::text as "Ticket",
       t.status as "Status",
       substring(t.subject for 100) as "Subject",
       o.name as "Organization",
@@ -221,7 +221,7 @@ query "new_and_open_tickets_report" {
   (
     select
       date_part('day', now() - t.created_at) as "Age (days)",
-      t.id as "Ticket",
+      t.id::text as "Ticket",
       t.status as "Status",
       substring(t.subject for 100) as "Subject",
       o.name as "Organization",
@@ -245,7 +245,7 @@ query "all_unsolved_tickets_report" {
     (
       select
         date_part('day', now() - t.created_at) as "Age (days)",
-        t.id as "Ticket",
+        t.id::text as "Ticket",
         --t.status as "Status",
         CASE
           WHEN t.status = 'pending' AND EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(t.tags) AS tag WHERE tag = 'customer_action') THEN 'customer_action'
@@ -270,7 +270,7 @@ query "all_unsolved_tickets_report" {
     (
       select
         date_part('day', now() - t.created_at) as "Age (days)",
-        t.id as "Ticket",
+        t.id::text as "Ticket",
         --t.status as "Status",
         CASE
           WHEN t.status = 'pending' AND EXISTS (SELECT 1  FROM JSONB_ARRAY_ELEMENTS_TEXT(t.tags) AS tag WHERE tag = 'customer_action') THEN 'customer_action'
